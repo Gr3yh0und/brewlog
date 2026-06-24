@@ -1,6 +1,7 @@
 # AI assistant settings
 .claude/
 .cline/
+.clinerules
 
 # Private
 .env
@@ -17,6 +18,7 @@ input/brauhelfer.sqlite
 input/enrichment/
 input/images/
 input/influxdb/
+input/logo/
 
 # Python
 __pycache__/
