@@ -1,0 +1,5 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Explicitly declare text files you want to always perform normalization on
+*.{js,css,md,py,yml,json,power?,ps1,psm1,psd1,ps1xml,ruleset,csproj,targets,props} text eol=lf
