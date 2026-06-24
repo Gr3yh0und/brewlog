@@ -47,6 +47,26 @@ pip install -r requirements.txt   # optional: Pillow + qrcode + influxdb-client
 
 ## Quick Start
 
+### Try it with sample data (no KBH2 database needed)
+
+Generate 5 example brews to preview the site locally:
+
+```bash
+python sample/generate_sample_data.py
+```
+
+Then configure `.env`, export, and preview:
+
+```bash
+copy .env.example .env   # edit FTP + brewery settings
+python web/export.py
+cd web && python -m http.server 8080
+```
+
+Open **http://localhost:8080** to see the sample catalog.
+
+### Use your own KBH2 database
+
 1. Copy `.env.example` → `.env` and configure your FTP credentials, brewery name, and logo filenames
 2. Place your `brauhelfer.sqlite` database in `input/`
 3. Run deploy to export data and publish the site:
