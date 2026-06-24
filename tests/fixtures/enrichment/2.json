@@ -1,0 +1,10 @@
+{
+  "label_color": "#1A0A00",
+  "tastes": [
+    {"rating": 0.80, "notes": "Bitterkeit"},
+    {"rating": 0.35, "notes": "Frucht"},
+    {"rating": 0.35, "notes": "Milde"},
+    {"rating": 0.60, "notes": "Erde"},
+    {"rating": 0.40, "notes": "Würze"}
+  ]
+}

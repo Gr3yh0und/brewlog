@@ -1,0 +1,11 @@
+{
+  "untappd_id": "12345",
+  "label_color": "#C8A860",
+  "tastes": [
+    {"rating": 0.60, "notes": "Bitterkeit"},
+    {"rating": 0.85, "notes": "Frucht"},
+    {"rating": 0.55, "notes": "Milde"},
+    {"rating": 0.20, "notes": "Erde"},
+    {"rating": 0.75, "notes": "Würze"}
+  ]
+}

@@ -1,0 +1,4 @@
+# Optional – core scripts work without these, but install for best results
+Pillow           # export.py: auto-resize oversized brew photos before upload
+qrcode           # generate_labels.py: real QR codes instead of placeholder squares
+influxdb-client  # fetch_influxdb.py: fetch fermentation data from InfluxDB v2

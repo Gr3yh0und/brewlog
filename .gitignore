@@ -1,0 +1,29 @@
+# AI assistant settings
+.claude/
+.cline/
+
+# Private
+.env
+
+# Generated output
+archive/
+logo/
+web/data/
+web/images/
+web/labels/
+web/logo/
+
+# Input (user's own files)
+input/brauhelfer.sqlite
+input/enrichment/
+input/images/
+input/influxdb/
+
+# Python
+__pycache__/
+*.pyc
+
+# Screenshots (user adds their own images)
+docs/screenshots/*.jpg
+docs/screenshots/*.png
+docs/screenshots/*.webp
