@@ -1,14 +1,16 @@
 """
 Shared test helpers.
-Adds web/ to sys.path and provides a fixture SQLite creator matching the
-minimal KBH2 schema that export.py and generate_labels.py require.
+Adds web/ and deploy/ to sys.path and provides a fixture SQLite creator
+matching the minimal KBH2 schema that export.py and generate_labels.py
+require.
 """
 import os
 import sqlite3
 import sys
 
-# Make web/ importable from any test file that does `import helpers`
+# Make web/ and deploy/ importable from any test file that does `import helpers`
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'web'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'deploy'))
 
 FIXTURES_DIR  = os.path.join(os.path.dirname(__file__), 'fixtures')
 ENRICHMENT_DIR = os.path.join(FIXTURES_DIR, 'enrichment')

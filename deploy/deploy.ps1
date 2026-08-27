@@ -1,11 +1,15 @@
 # deploy.ps1 – KBH2 Web Frontend → FTP upload (Windows / PowerShell)
 # Requires: .env in the project root (see .env.example)
 # Optional parameters:
-#   -Labels    → also run generate_labels.py and upload web/labels/
-#   -SkipData  → skip export.py and skip uploading web/data/ and web/images/
-param([switch]$Labels, [switch]$SkipData)
+#   -Labels       → also run generate_labels.py and upload web/labels/
+#   -SkipData     → skip export.py and skip uploading web/data/ and web/images/
+#   -Rollback [N] → re-upload a previously snapshotted release verbatim, no
+#                   export/upload (N releases back, default 1 — see
+#                   deploy/rollback.py, WEBAPP_PROJECT_STANDARD.md §14B)
+param([switch]$Labels, [switch]$SkipData, [switch]$Rollback, [int]$RollbackN = 1)
 
-$EnvFile = "$PSScriptRoot\..\.env"
+$RootDir = "$PSScriptRoot\.."
+$EnvFile = "$RootDir\.env"
 if (-not (Test-Path $EnvFile)) {
     Write-Error "No .env found: $EnvFile`nPlease copy .env.example to .env and fill in credentials."
     exit 1
@@ -15,6 +19,12 @@ Get-Content $EnvFile | ForEach-Object {
     if ($_ -match '^\s*([^#=\s]+)\s*=\s*(.*)\s*$') {
         Set-Variable -Name $Matches[1] -Value $Matches[2] -Scope Script
     }
+}
+
+if ($Rollback) {
+    Write-Host "==> Rolling back $RollbackN release(s)..."
+    python "$RootDir\deploy\rollback.py" rollback $RollbackN
+    exit $LASTEXITCODE
 }
 
 $WebDir = "$PSScriptRoot\..\web"
@@ -44,6 +54,11 @@ if ($Labels) {
     python "$WebDir\generate_labels.py"
     if ($LASTEXITCODE -ne 0) { Write-Error "generate_labels.py failed."; exit 1 }
 }
+
+# 2.5 Snapshot this release before uploading, for -Rollback (WEBAPP_PROJECT_STANDARD.md §14B)
+Write-Host "==> Snapshotting release..."
+python "$RootDir\deploy\rollback.py" snapshot
+if ($LASTEXITCODE -ne 0) { Write-Error "Snapshot failed."; exit 1 }
 
 # 3. Upload index.html
 Write-Host "==> Uploading to ftp://${FTP_HOST}${FTP_DIR}/ ..."

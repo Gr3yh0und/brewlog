@@ -2,8 +2,11 @@
 # deploy.sh – KBH2 Web Frontend → FTP upload (Mac/Linux / bash)
 # Requires: .env in the project root (see .env.example), curl, python3
 # Optional flags:
-#   --labels     → also run generate_labels.py and upload web/labels/
-#   --skip-data  → skip export.py and skip uploading web/data/ and web/images/
+#   --labels        → also run generate_labels.py and upload web/labels/
+#   --skip-data     → skip export.py and skip uploading web/data/ and web/images/
+#   --rollback[=N]  → re-upload a previously snapshotted release verbatim, no
+#                     export/upload (N releases back, default 1 — see
+#                     deploy/rollback.py, WEBAPP_PROJECT_STANDARD.md §14B)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,10 +16,14 @@ ENV_FILE="$ROOT/.env"
 
 LABELS=false
 SKIP_DATA=false
+ROLLBACK=false
+ROLLBACK_N=1
 for arg in "$@"; do
     case "$arg" in
-        --labels)    LABELS=true ;;
-        --skip-data) SKIP_DATA=true ;;
+        --labels)        LABELS=true ;;
+        --skip-data)     SKIP_DATA=true ;;
+        --rollback)      ROLLBACK=true ;;
+        --rollback=*)    ROLLBACK=true; ROLLBACK_N="${arg#--rollback=}" ;;
         *) echo "Unknown argument: $arg" >&2; exit 1 ;;
     esac
 done
@@ -33,6 +40,12 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         declare "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
     fi
 done < "$ENV_FILE"
+
+if $ROLLBACK; then
+    echo "==> Rolling back ${ROLLBACK_N} release(s)..."
+    python3 "$ROOT/deploy/rollback.py" rollback "$ROLLBACK_N"
+    exit $?
+fi
 
 urlencode() {
     python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$1"
@@ -62,6 +75,10 @@ if $LABELS; then
     echo "==> Generating SVG labels..."
     python3 "$WEB_DIR/generate_labels.py"
 fi
+
+# 2.5 Snapshot this release before uploading, for --rollback (WEBAPP_PROJECT_STANDARD.md §14B)
+echo "==> Snapshotting release..."
+python3 "$ROOT/deploy/rollback.py" snapshot
 
 echo "==> Uploading to ftp://${FTP_HOST}${FTP_DIR}/ ..."
 

@@ -47,6 +47,22 @@ bash deploy/deploy.sh --skip-data --labels
 
 Each file upload retries up to 3 times (3 s pause between attempts) before the script aborts. To retry just the labels after a partial failure: add `-SkipData -Labels` / `--skip-data --labels`.
 
+## Rollback
+
+Every deploy snapshots the exact bytes it's about to upload (`web/index.html`, `favicon.svg`, `logo/`, `i18n/`, `data/`, `images/` — not `labels/`, which is a separate printable artifact) to `deploy/releases/` before uploading, and keeps the last 5. `--rollback` re-uploads an earlier snapshot verbatim — no re-export, no rebuild, so it still works even if the KBH2 database has since changed in a way that would make a fresh export different from what was actually live.
+
+```powershell
+deploy/deploy.ps1 -Rollback              # re-publish the release before the current one
+deploy/deploy.ps1 -Rollback -RollbackN 2 # go back 2 releases instead of 1
+```
+
+```bash
+bash deploy/deploy.sh --rollback         # re-publish the release before the current one
+bash deploy/deploy.sh --rollback=2       # go back 2 releases instead of 1
+```
+
+`python3 deploy/rollback.py list` shows what's saved locally, newest first (`[0]` is what's live now, assuming nothing was published outside these scripts). The public URL is load-bearing (printed bottle QR codes point at it — see [main README](../README.md)), so a bad publish is worth rolling back rather than leaving live while you investigate.
+
 ## Local Development
 
 ```powershell

@@ -19,6 +19,10 @@ web/images/
 web/labels/
 web/logo/
 
+# Rollback snapshots (WEBAPP_PROJECT_STANDARD.md §14B) — this is a public
+# repo and snapshots contain the full rendered site, not just its inputs.
+deploy/releases/
+
 # Input (user's own files)
 input/brauhelfer.sqlite
 input/enrichment/
