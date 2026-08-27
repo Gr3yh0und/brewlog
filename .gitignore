@@ -1,10 +1,16 @@
-# AI assistant settings
-.claude/
+# AI assistant settings — local tool configs/session state, not project code.
+# .claude/skills/ is committed (WEBAPP_PROJECT_STANDARD.md §9): those are the
+# thin /deploy and /rollback wrappers, not local session state.
+.claude/*
+!.claude/skills/
 .cline/
 .clinerules
 
 # Private
 .env
+
+# Per-environment /deploy config (WEBAPP_PROJECT_STANDARD.md §9) — see deploy.config.example
+deploy.config
 
 # Generated output
 archive/

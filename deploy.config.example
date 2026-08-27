@@ -1,0 +1,28 @@
+# Per-environment /deploy config — see infrastructure/scripts/deploy-common.sh's
+# header comment for the full schema. Gitignored (WEBAPP_PROJECT_STANDARD.md §9);
+# copy this to deploy.config and edit if a value ever needs to differ locally.
+#
+# APP_NAME and PROFILE come from homelab.yml (§1a) — "brewlog" / B — and don't
+# need to be set here; setting them here anyway would be a smell to clean up,
+# not a normal override, per WEBAPP_PROJECT_STANDARD.md §1a.
+#
+# Not yet wired to the shared deploy.sh/rollback.sh — this repo still runs its
+# own bespoke deploy/deploy.sh + deploy/deploy.ps1 (documented exception,
+# WEBAPP_PROJECT_STANDARD.md §9, see infrastructure/compliance/brewlog.md §9).
+# This file exists so the eventual cutover is a switch, not a rewrite.
+#
+# TEST_CMD must stay byte-identical to .github/workflows/ci.yml's test step
+# (WEBAPP_PROJECT_STANDARD.md §7) — a CI pass that ran a different command
+# than the deploy gate would be checking the wrong thing.
+TEST_CMD="python3 -m unittest discover -s tests -v"
+
+# No build step — brewlog is a single index.html plus static data files
+# (WEBAPP_PROJECT_STANDARD.md §12B); the "build directory" is just the
+# source directory.
+BUILD_DIR="web"
+
+# Dual-target: rsync to the local proxy host and FTP to the public host, from
+# the same build. The public target is genuinely publishable — it's the
+# catalog itself — and its URL is load-bearing (printed bottle QR codes,
+# WEBAPP_PROJECT_STANDARD.md §13B), so it must never change.
+TARGETS="local public"

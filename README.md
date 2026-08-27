@@ -119,3 +119,5 @@ Tests run against a self-contained fixture SQLite (two example brews created in 
 - **[Deployment & Workflow](docs/DEPLOYMENT.md)** — Deploy commands, local development, label generator
 - **[Website Features](docs/WEBSITE.md)** — List view, cards, detail view, radar chart
 - **[InfluxDB](docs/INFLUXDB.md)** — Fermentation data fetching, schema, configuration
+- **[`homelab.yml`](homelab.yml)** — Classification metadata (profile, route, personal-data flag) for infra tooling — see `infrastructure/WEBAPP_PROJECT_STANDARD.md` §1a
+- **Compliance** — this repo is public, so its `COMPLIANCE.md` lives in the infrastructure repo instead: [`compliance/brewlog.md`](https://github.com/Gr3yh0und/infrastructure/blob/main/compliance/brewlog.md) (see `WEBAPP_PROJECT_STANDARD.md` §1b for why)
