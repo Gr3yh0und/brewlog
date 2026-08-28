@@ -98,11 +98,37 @@ class TestRollback(unittest.TestCase):
         releases = rollback.list_releases()
         self.assertEqual(len(releases), 2)
         names = sorted(r.name for r in releases)
-        self.assertTrue(names[1].startswith(names[0]))
-        self.assertTrue(names[1].endswith('-1'))
+        self.assertNotEqual(names[0], names[1])
+        self.assertTrue(all('20260101T000000.000000Z' in n for n in names))
 
         contents = {r.name: (r / 'index.html').read_text(encoding='utf-8') for r in releases}
         self.assertEqual(sorted(contents.values()), ['collision-1', 'collision-2'])
+
+    # -- Regression: a freed release name must never be reused. Under a
+    #    frozen clock (worst case -- every call returns the same timestamp,
+    #    which coarse clock resolution or a tight retry loop can trigger for
+    #    real), a bare/lowest-sorting name that gets pruned away must not be
+    #    handed to a later deploy, which would delete that deploy's own
+    #    snapshot in the same call that created it. --
+    def test_frozen_clock_prune_never_deletes_the_release_just_created(self):
+        fixed_now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        created = []
+        with unittest.mock.patch.object(rollback, 'datetime') as mock_dt:
+            mock_dt.now.return_value = fixed_now
+            for i in range(12):
+                release_dir = rollback.snapshot_release(self._write_source(str(i), f'content-{i}'))
+                created.append(release_dir)
+                self.assertTrue(
+                    release_dir.exists(),
+                    f'deploy {i}: release {release_dir.name!r} was deleted in the same '
+                    f'call that created it -- its snapshot was never actually persisted',
+                )
+
+        releases = rollback.list_releases()
+        self.assertEqual(len(releases), 5)
+        # The 5 most recent deploys (7..11) must be exactly what survived.
+        contents = sorted((r / 'index.html').read_text(encoding='utf-8') for r in releases)
+        self.assertEqual(contents, sorted(f'content-{i}' for i in range(7, 12)))
 
     def test_release_files_matches_actual_web_dir_layout(self):
         # _release_files() reads the real web/ dir (no monkeypatching) --

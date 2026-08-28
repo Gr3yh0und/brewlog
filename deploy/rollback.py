@@ -22,6 +22,7 @@ Usage:
 """
 import ftplib
 import os
+import re
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -72,33 +73,43 @@ def _release_files():
     return files
 
 
+_SEQ_RE = re.compile(r'^(\d{6})-')
+
+
 def list_releases():
-    """Saved releases, newest first (string sort works because the "-N"
-    disambiguation suffix in snapshot_release() still sorts after its
-    bare-timestamp prefix)."""
+    """Saved releases, newest first. Every release dir is prefixed with a
+    zero-padded monotonic sequence number (f"{seq:06d}-..."), so lexicographic
+    order always matches creation order -- unlike a bare timestamp, a
+    sequence number freed by pruning is never reused, so a later release can
+    never sort as older than an earlier one that already got pruned."""
     if not RELEASES_DIR.exists():
         return []
     return sorted((d for d in RELEASES_DIR.iterdir() if d.is_dir()), reverse=True)
 
 
-def snapshot_release(files=None):
-    """Save `files` ({relative path: local Path}) as a new release, prune to KEEP_RELEASES.
+def _next_sequence():
+    """max(existing sequence numbers) + 1. No counter file needed -- pruning
+    only ever removes the lowest-numbered releases, so the highest surviving
+    sequence number is always the true running max."""
+    if not RELEASES_DIR.exists():
+        return 0
+    seqs = [int(m.group(1)) for d in RELEASES_DIR.iterdir()
+            if d.is_dir() and (m := _SEQ_RE.match(d.name))]
+    return max(seqs, default=-1) + 1
 
-    The timestamp is microsecond-resolution but not guaranteed unique across
-    back-to-back calls (e.g. two deploys in the same test run) -- a "-N"
-    suffix disambiguates rather than silently overwriting an earlier
-    release, mirroring housebuycomparison's deploy.py::_snapshot_release.
-    """
+
+def snapshot_release(files=None):
+    """Save `files` ({relative path: local Path}) as a new release, prune to KEEP_RELEASES."""
     if files is None:
         files = _release_files()
 
     RELEASES_DIR.mkdir(parents=True, exist_ok=True)
+    seq = _next_sequence()
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')
-    release_dir = RELEASES_DIR / stamp
-    n = 1
+    release_dir = RELEASES_DIR / f'{seq:06d}-{stamp}'
     while release_dir.exists():
-        release_dir = RELEASES_DIR / f'{stamp}-{n}'
-        n += 1
+        seq += 1
+        release_dir = RELEASES_DIR / f'{seq:06d}-{stamp}'
     release_dir.mkdir(parents=True)
 
     for rel_path, local_path in files.items():
