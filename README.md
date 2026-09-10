@@ -76,7 +76,8 @@ deploy/deploy.ps1          # Windows
 bash deploy/deploy.sh      # Mac/Linux
 ```
 
-That's it — your brew log is live at the URL configured in `FTP_DIR`.
+That's it — your brew log is live at the URL configured in `FTP_DIR`. See
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the `local` publish target and rollback for both.
 
 ## Project Structure
 

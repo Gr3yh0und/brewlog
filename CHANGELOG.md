@@ -13,6 +13,11 @@ No `/deploy` skill exists for this repo yet (bespoke FTP deploy path, `WEBAPP_PR
   `deploy.config.example`, `.claude/skills/{deploy,rollback}`, Dependabot.
 - `deploy/rollback.py`: snapshots the exact bytes of every deploy before upload, keeps the last 5,
   `--rollback[=N]` re-uploads a snapshot verbatim.
+- `local` publish target (`deploy/deploy.sh`/`.ps1` `[local|public|both]`): publishes to
+  `WWW_ROOT/brewlog/releases/<VERSION>/` and flips the `current` symlink
+  (`WEBAPP_PROJECT_STANDARD.md` §14B). Target defaults to `public`, unchanged from before.
+  `deploy/rollback.py publish-local`/`list-local`/`rollback-local[=N]` implement the mechanics;
+  rollback flips `current` back, no re-copy.
 
 ### Fixed
 - `deploy/rollback.py`: a pruned bare release name could be reused by a later deploy and get

@@ -1,3 +1,4 @@
+import os
 import shutil
 import tempfile
 import unittest
@@ -138,6 +139,116 @@ class TestRollback(unittest.TestCase):
         self.assertIn('index.html', files)
         self.assertIn('favicon.svg', files)
         self.assertTrue(any(k.startswith('i18n/') for k in files))
+
+
+class TestLocalTarget(unittest.TestCase):
+    """publish_local()/do_local_rollback() -- the WWW_ROOT/<app>/releases/
+    + current-symlink mechanism (WEBAPP_PROJECT_STANDARD.md §14B), distinct
+    from the FTP snapshot mechanism above."""
+
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.app_root = self.tmpdir / 'www' / 'brewlog'
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _files(self, content):
+        src_dir = self.tmpdir / f'src_{content}'
+        src_dir.mkdir()
+        f = src_dir / 'index.html'
+        f.write_text(content, encoding='utf-8')
+        return {'index.html': f}
+
+    def test_publish_creates_release_and_flips_current(self):
+        release_dir = rollback.publish_local(
+            version='1.0.0', files=self._files('v1'), app_root=self.app_root
+        )
+        self.assertTrue(release_dir.is_dir())
+        self.assertEqual((release_dir / 'index.html').read_text(encoding='utf-8'), 'v1')
+
+        current = self.app_root / 'current'
+        self.assertTrue(current.is_symlink())
+        # Relative target, not absolute -- WEBAPP_PROJECT_STANDARD.md §14B:
+        # an absolute symlink resolves host-side and dangles inside Caddy's
+        # container, which bind-mounts this tree at a different path.
+        raw_target = os.readlink(current)
+        self.assertFalse(os.path.isabs(raw_target), f'symlink target must be relative, got {raw_target!r}')
+        self.assertEqual(raw_target, 'releases/1.0.0')
+        self.assertEqual((current / 'index.html').read_text(encoding='utf-8'), 'v1')
+
+    def test_publish_second_release_moves_current_forward(self):
+        rollback.publish_local(version='1.0.0', files=self._files('v1'), app_root=self.app_root)
+        rollback.publish_local(version='1.0.1', files=self._files('v2'), app_root=self.app_root)
+
+        current = self.app_root / 'current'
+        self.assertEqual(os.readlink(current), 'releases/1.0.1')
+        self.assertEqual((current / 'index.html').read_text(encoding='utf-8'), 'v2')
+        # The old release is untouched, not overwritten in place.
+        old = self.app_root / 'releases' / '1.0.0'
+        self.assertEqual((old / 'index.html').read_text(encoding='utf-8'), 'v1')
+
+    def test_publish_refuses_empty_release(self):
+        with self.assertRaises(rollback.RollbackError):
+            rollback.publish_local(version='1.0.0', files={}, app_root=self.app_root)
+        # Nothing was flipped -- no dangling/empty `current`.
+        self.assertFalse((self.app_root / 'current').exists())
+
+    def test_publish_prunes_to_5_newest_by_version_not_mtime(self):
+        # Publish out of chronological order (2.0.0 created after 1.0.5 on
+        # disk but is not the highest version) to prove pruning sorts by
+        # version, not filesystem mtime/creation order.
+        for v in ['1.0.0', '1.0.1', '1.0.2', '1.0.3', '1.0.4', '1.0.5']:
+            rollback.publish_local(version=v, files=self._files(v), app_root=self.app_root)
+
+        releases = rollback.list_local_releases(self.app_root)
+        self.assertEqual(len(releases), 5)
+        self.assertEqual(
+            sorted(r.name for r in releases),
+            ['1.0.1', '1.0.2', '1.0.3', '1.0.4', '1.0.5'],
+        )
+
+    def test_rollback_flips_current_to_previous_not_latest(self):
+        rollback.publish_local(version='1.0.0', files=self._files('v1'), app_root=self.app_root)
+        rollback.publish_local(version='1.0.1', files=self._files('v2'), app_root=self.app_root)
+        rollback.publish_local(version='1.0.2', files=self._files('v3'), app_root=self.app_root)
+
+        target = rollback.do_local_rollback(steps_back=1, app_root=self.app_root)
+
+        self.assertEqual(target.name, '1.0.1')
+        current = self.app_root / 'current'
+        self.assertEqual(os.readlink(current), 'releases/1.0.1')
+        self.assertEqual((current / 'index.html').read_text(encoding='utf-8'), 'v2')
+
+    def test_rollback_two_steps_back(self):
+        rollback.publish_local(version='1.0.0', files=self._files('v1'), app_root=self.app_root)
+        rollback.publish_local(version='1.0.1', files=self._files('v2'), app_root=self.app_root)
+        rollback.publish_local(version='1.0.2', files=self._files('v3'), app_root=self.app_root)
+
+        target = rollback.do_local_rollback(steps_back=2, app_root=self.app_root)
+        self.assertEqual(target.name, '1.0.0')
+
+    def test_rollback_insufficient_releases_raises(self):
+        rollback.publish_local(version='1.0.0', files=self._files('v1'), app_root=self.app_root)
+        with self.assertRaises(rollback.RollbackError):
+            rollback.do_local_rollback(steps_back=1, app_root=self.app_root)
+
+    def test_rollback_no_releases_raises(self):
+        with self.assertRaises(rollback.RollbackError):
+            rollback.do_local_rollback(steps_back=1, app_root=self.app_root)
+
+    def test_rollback_after_current_missing_lands_on_newest(self):
+        # A first-ever publish creates `current` itself, so this only matters
+        # if `current` was somehow removed after a publish -- do_local_rollback
+        # must not crash. With no current to anchor to, "back 1 step" resolves
+        # to the newest known-good release (index 0), same as "start from
+        # before the newest and step forward once".
+        rollback.publish_local(version='1.0.0', files=self._files('v1'), app_root=self.app_root)
+        rollback.publish_local(version='1.0.1', files=self._files('v2'), app_root=self.app_root)
+        (self.app_root / 'current').unlink()
+
+        target = rollback.do_local_rollback(steps_back=1, app_root=self.app_root)
+        self.assertEqual(target.name, '1.0.1')
 
 
 if __name__ == '__main__':

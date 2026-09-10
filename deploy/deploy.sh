@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# deploy.sh – KBH2 Web Frontend → FTP upload (Mac/Linux / bash)
+# deploy.sh – KBH2 Web Frontend → local + FTP publish (Mac/Linux / bash)
 # Requires: .env in the project root (see .env.example), curl, python3
+# Usage: deploy.sh [local|public|both] [flags]
+#   Target defaults to "public" (unchanged historical behavior — FTP only).
+#   "local" publishes to WWW_ROOT/brewlog/releases/<VERSION>/ and flips the
+#   `current` symlink (WEBAPP_PROJECT_STANDARD.md §14B); only makes sense run
+#   from the server, where WWW_ROOT is a real local path.
 # Optional flags:
 #   --labels        → also run generate_labels.py and upload web/labels/
+#                     (public target only — local never serves labels/)
 #   --skip-data     → skip export.py and skip uploading web/data/ and web/images/
-#   --rollback[=N]  → re-upload a previously snapshotted release verbatim, no
-#                     export/upload (N releases back, default 1 — see
-#                     deploy/rollback.py, WEBAPP_PROJECT_STANDARD.md §14B)
+#   --rollback[=N]  → roll back N releases (default 1) instead of publishing.
+#                     public: re-upload a previously snapshotted release
+#                     verbatim, no export/upload. local: flip `current` back,
+#                     no re-copy. Target "both" isn't valid with --rollback —
+#                     the two targets don't share a release history, so pick one.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,12 +22,14 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WEB_DIR="$ROOT/web"
 ENV_FILE="$ROOT/.env"
 
+TARGET="public"
 LABELS=false
 SKIP_DATA=false
 ROLLBACK=false
 ROLLBACK_N=1
 for arg in "$@"; do
     case "$arg" in
+        local|public|both) TARGET="$arg" ;;
         --labels)        LABELS=true ;;
         --skip-data)     SKIP_DATA=true ;;
         --rollback)      ROLLBACK=true ;;
@@ -27,6 +37,11 @@ for arg in "$@"; do
         *) echo "Unknown argument: $arg" >&2; exit 1 ;;
     esac
 done
+
+if $ROLLBACK && [[ "$TARGET" == "both" ]]; then
+    echo "Error: --rollback needs a single target (local or public), not 'both' — the two targets don't share a release history." >&2
+    exit 1
+fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
     echo "Error: No .env found: $ENV_FILE" >&2
@@ -42,8 +57,13 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 done < "$ENV_FILE"
 
 if $ROLLBACK; then
-    echo "==> Rolling back ${ROLLBACK_N} release(s)..."
-    python3 "$ROOT/deploy/rollback.py" rollback "$ROLLBACK_N"
+    if [[ "$TARGET" == "local" ]]; then
+        echo "==> Rolling back local release ${ROLLBACK_N} step(s)..."
+        python3 "$ROOT/deploy/rollback.py" rollback-local "$ROLLBACK_N"
+    else
+        echo "==> Rolling back ${ROLLBACK_N} release(s)..."
+        python3 "$ROOT/deploy/rollback.py" rollback "$ROLLBACK_N"
+    fi
     exit $?
 fi
 
@@ -76,69 +96,79 @@ if $LABELS; then
     python3 "$WEB_DIR/generate_labels.py"
 fi
 
-# 2.5 Snapshot this release before uploading, for --rollback (WEBAPP_PROJECT_STANDARD.md §14B)
-echo "==> Snapshotting release..."
-python3 "$ROOT/deploy/rollback.py" snapshot
+if [[ "$TARGET" == "public" || "$TARGET" == "both" ]]; then
+    # 2.5 Snapshot this release before uploading, for --rollback (WEBAPP_PROJECT_STANDARD.md §14B)
+    echo "==> Snapshotting release..."
+    python3 "$ROOT/deploy/rollback.py" snapshot
 
-echo "==> Uploading to ftp://${FTP_HOST}${FTP_DIR}/ ..."
+    echo "==> Uploading to ftp://${FTP_HOST}${FTP_DIR}/ ..."
 
-# 3. Upload index.html
-echo "  index.html"
-send_file "$WEB_DIR/index.html" "ftp://${FTP_HOST}${FTP_DIR}/index.html"
+    # 3. Upload index.html
+    echo "  index.html"
+    send_file "$WEB_DIR/index.html" "ftp://${FTP_HOST}${FTP_DIR}/index.html"
 
-# 4. Upload favicon.svg
-echo "  favicon.svg"
-send_file "$WEB_DIR/favicon.svg" "ftp://${FTP_HOST}${FTP_DIR}/favicon.svg"
+    # 4. Upload favicon.svg
+    echo "  favicon.svg"
+    send_file "$WEB_DIR/favicon.svg" "ftp://${FTP_HOST}${FTP_DIR}/favicon.svg"
 
-# 5. Upload logo/
-echo "  logo/..."
-LOGO_ENCODED="$(urlencode "$LOGO_PNG")"
-send_file "$WEB_DIR/logo/$LOGO_PNG" "ftp://${FTP_HOST}${FTP_DIR}/logo/$LOGO_ENCODED"
+    # 5. Upload logo/
+    echo "  logo/..."
+    LOGO_ENCODED="$(urlencode "$LOGO_PNG")"
+    send_file "$WEB_DIR/logo/$LOGO_PNG" "ftp://${FTP_HOST}${FTP_DIR}/logo/$LOGO_ENCODED"
 
-# 6. Upload i18n/
-I18N_FILES=("$WEB_DIR/i18n"/*.json)
-echo "  i18n/ (${#I18N_FILES[@]} files)..."
-for f in "${I18N_FILES[@]}"; do
-    send_file "$f" "ftp://${FTP_HOST}${FTP_DIR}/i18n/$(basename "$f")"
-done
-
-# 7. Upload data/ (skipped with --skip-data)
-if $SKIP_DATA; then
-    echo "  data/ skipped (--skip-data)"
-else
-    DATA_FILES=("$WEB_DIR/data"/*.json)
-    echo "  data/ (${#DATA_FILES[@]} files)..."
-    for f in "${DATA_FILES[@]}"; do
-        send_file "$f" "ftp://${FTP_HOST}${FTP_DIR}/data/$(basename "$f")"
+    # 6. Upload i18n/
+    I18N_FILES=("$WEB_DIR/i18n"/*.json)
+    echo "  i18n/ (${#I18N_FILES[@]} files)..."
+    for f in "${I18N_FILES[@]}"; do
+        send_file "$f" "ftp://${FTP_HOST}${FTP_DIR}/i18n/$(basename "$f")"
     done
-fi
 
-# 8. Upload images/ (skipped with --skip-data)
-if $SKIP_DATA; then
-    echo "  images/ skipped (--skip-data)"
-elif [[ -d "$WEB_DIR/images" ]]; then
-    IMAGE_FILES=("$WEB_DIR/images"/*)
-    echo "  images/ (${#IMAGE_FILES[@]} files)..."
-    for f in "${IMAGE_FILES[@]}"; do
-        ENCODED="$(urlencode "$(basename "$f")")"
-        send_file "$f" "ftp://${FTP_HOST}${FTP_DIR}/images/$ENCODED"
-    done
-else
-    echo "  images/ not found, skipping"
-fi
-
-# 9. Upload labels/ (only with --labels)
-if $LABELS; then
-    if [[ -d "$WEB_DIR/labels" ]]; then
-        LABEL_FILES=("$WEB_DIR/labels"/*.svg)
-        echo "  labels/ (${#LABEL_FILES[@]} files)..."
-        for f in "${LABEL_FILES[@]}"; do
-            send_file "$f" "ftp://${FTP_HOST}${FTP_DIR}/labels/$(basename "$f")"
+    # 7. Upload data/ (skipped with --skip-data)
+    if $SKIP_DATA; then
+        echo "  data/ skipped (--skip-data)"
+    else
+        DATA_FILES=("$WEB_DIR/data"/*.json)
+        echo "  data/ (${#DATA_FILES[@]} files)..."
+        for f in "${DATA_FILES[@]}"; do
+            send_file "$f" "ftp://${FTP_HOST}${FTP_DIR}/data/$(basename "$f")"
         done
     fi
-else
-    echo "  labels/ skipped (no --labels flag)"
+
+    # 8. Upload images/ (skipped with --skip-data)
+    if $SKIP_DATA; then
+        echo "  images/ skipped (--skip-data)"
+    elif [[ -d "$WEB_DIR/images" ]]; then
+        IMAGE_FILES=("$WEB_DIR/images"/*)
+        echo "  images/ (${#IMAGE_FILES[@]} files)..."
+        for f in "${IMAGE_FILES[@]}"; do
+            ENCODED="$(urlencode "$(basename "$f")")"
+            send_file "$f" "ftp://${FTP_HOST}${FTP_DIR}/images/$ENCODED"
+        done
+    else
+        echo "  images/ not found, skipping"
+    fi
+
+    # 9. Upload labels/ (only with --labels)
+    if $LABELS; then
+        if [[ -d "$WEB_DIR/labels" ]]; then
+            LABEL_FILES=("$WEB_DIR/labels"/*.svg)
+            echo "  labels/ (${#LABEL_FILES[@]} files)..."
+            for f in "${LABEL_FILES[@]}"; do
+                send_file "$f" "ftp://${FTP_HOST}${FTP_DIR}/labels/$(basename "$f")"
+            done
+        fi
+    else
+        echo "  labels/ skipped (no --labels flag)"
+    fi
+
+    echo ""
+    echo "Public deploy complete: ${SITE_URL}"
 fi
 
-echo ""
-echo "Deploy complete: ${SITE_URL}"
+if [[ "$TARGET" == "local" || "$TARGET" == "both" ]]; then
+    # local: publish into WWW_ROOT/brewlog/releases/<VERSION>/ and flip
+    # `current` (WEBAPP_PROJECT_STANDARD.md §14B). No --labels equivalent —
+    # printed label sheets aren't part of the served site either target ships.
+    echo "==> Publishing local release $(cat "$ROOT/VERSION")..."
+    python3 "$ROOT/deploy/rollback.py" publish-local
+fi

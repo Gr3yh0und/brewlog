@@ -1,6 +1,7 @@
 """
-Snapshot + rollback for brewlog's FTP-only publish target
-(WEBAPP_PROJECT_STANDARD.md SS14B).
+Publish/rollback mechanics for brewlog's two Profile B targets
+(WEBAPP_PROJECT_STANDARD.md SS14B): `public` (FTP, snapshot-based) and
+`local` (a release-dir tree under WWW_ROOT served by the proxy, symlink-based).
 
 deploy.sh/deploy.ps1 call `snapshot` right after export.py/generate_labels.py
 and before any upload begins, so the snapshot captures the exact bytes about
@@ -9,16 +10,28 @@ exported data, so re-running export.py months later against a changed KBH2
 database would not reproduce what was actually live; only a byte snapshot
 can. `rollback [N]` re-uploads an earlier snapshot verbatim, no rebuild.
 
-This target has no symlink to flip (WEBAPP_PROJECT_STANDARD.md SS14B is
-written for a target with one) -- it's a single directory on a remote FTP
+The `public` target has no symlink to flip (WEBAPP_PROJECT_STANDARD.md SS14B
+is written for a target with one) -- it's a single directory on a remote FTP
 host, overwritten in place, the same shape housebuycomparison's deploy.py
 solved this for. releases[0] is what's live right now, assuming nothing was
 published outside these two scripts.
 
+The `local` target *does* have a symlink (SS14B's default layout:
+WWW_ROOT/brewlog/releases/<version>/, WWW_ROOT/brewlog/current -> one of
+them) -- publish_local()/do_local_rollback() mirror
+infrastructure/scripts/deploy-common.sh's profile_b_publish_local() and
+rollback.sh's local branch, kept here instead of shelling out to the shared
+scripts because this repo still runs its own bespoke deploy path
+(WEBAPP_PROJECT_STANDARD.md SS9, see infrastructure/compliance/brewlog.md SS9).
+
 Usage:
-    python3 deploy/rollback.py snapshot        # called by deploy.sh/.ps1
-    python3 deploy/rollback.py list            # show saved releases
-    python3 deploy/rollback.py rollback [N]    # re-upload releases[N], default 1
+    python3 deploy/rollback.py snapshot          # called by deploy.sh/.ps1 (public)
+    python3 deploy/rollback.py list              # show saved public releases
+    python3 deploy/rollback.py rollback [N]      # re-upload releases[N], default 1
+
+    python3 deploy/rollback.py publish-local     # called by deploy.sh/.ps1 (local)
+    python3 deploy/rollback.py list-local        # show local releases under WWW_ROOT
+    python3 deploy/rollback.py rollback-local [N]  # flip `current` back N releases
 """
 import ftplib
 import os
@@ -35,6 +48,13 @@ KEEP_RELEASES = 5
 
 sys.path.insert(0, str(WEB_DIR))
 from utils import load_env  # noqa: E402
+
+# WWW_ROOT: an env var takes precedence over .env (matches how every other
+# optional setting in this repo is read -- utils.load_env() -- but WWW_ROOT
+# is server-path-shaped and more likely to need a per-machine override, e.g.
+# a Windows workstation reaching the same tree through a mapped drive).
+APP_NAME = 'brewlog'
+WWW_ROOT = Path(os.environ.get('WWW_ROOT') or load_env().get('WWW_ROOT', '/samba/server/www'))
 
 
 class RollbackError(Exception):
@@ -179,6 +199,127 @@ def do_rollback(steps_back=1, uploader=None, env=None):
     return target, files
 
 
+# ---------------------------------------------------------------------------
+# local target (WEBAPP_PROJECT_STANDARD.md SS14B: WWW_ROOT/<app>/releases/<version>/,
+# WWW_ROOT/<app>/current -> one of them, served directly by the proxy)
+# ---------------------------------------------------------------------------
+
+_VERSION_RE = re.compile(r'^(\d+)\.(\d+)\.(\d+)$')
+
+
+def _version():
+    """Contents of the repo's VERSION file (WEBAPP_PROJECT_STANDARD.md SS2) --
+    the single source of truth for what a local publish is named."""
+    return (ROOT / 'VERSION').read_text(encoding='utf-8').strip()
+
+
+def _version_key(name):
+    """Sort key for a release dir name. Unrecognized names (nothing in this
+    repo's history predates the local target, so this is defensive rather
+    than a migration path) sort oldest, so they're never picked as a
+    rollback target and are the first pruned."""
+    m = _VERSION_RE.match(name)
+    return tuple(int(x) for x in m.groups()) if m else (-1, -1, -1)
+
+
+def _local_app_root(app_root=None):
+    return Path(app_root) if app_root is not None else WWW_ROOT / APP_NAME
+
+
+def list_local_releases(app_root=None):
+    """Local release dirs under <app_root>/releases, newest version first."""
+    releases_dir = _local_app_root(app_root) / 'releases'
+    if not releases_dir.exists():
+        return []
+    dirs = [d for d in releases_dir.iterdir() if d.is_dir()]
+    return sorted(dirs, key=lambda d: _version_key(d.name), reverse=True)
+
+
+def _flip_current(app_root, release_name):
+    """Point <app_root>/current at releases/<release_name>, atomically.
+
+    Relative target ('releases/1.2.1'), never absolute -- Caddy bind-mounts
+    this same tree at a different absolute path inside its container
+    (docs/network-topology.md), so an absolute symlink resolves fine from a
+    host shell and is silently dangling from inside the container. Written
+    via a temp symlink + atomic rename rather than unlink-then-symlink, so
+    `current` is never briefly missing under a concurrent request.
+    """
+    app_root = Path(app_root)
+    tmp = app_root / 'current.tmp'
+    if tmp.is_symlink() or tmp.exists():
+        tmp.unlink()
+    tmp.symlink_to(Path('releases') / release_name)
+    tmp.replace(app_root / 'current')
+
+
+def publish_local(version=None, files=None, app_root=None, keep=KEEP_RELEASES):
+    """Publish `files` to <app_root>/releases/<version>/ and flip `current`
+    to it. Mirrors infrastructure/scripts/deploy-common.sh's
+    profile_b_publish_local(): refuse to flip onto an empty release, prune
+    everything past `keep` newest versions afterwards.
+    """
+    if version is None:
+        version = _version()
+    if files is None:
+        files = _release_files()
+    app_root = _local_app_root(app_root)
+
+    release_dir = app_root / 'releases' / version
+    release_dir.mkdir(parents=True, exist_ok=True)
+    for rel_path, local_path in files.items():
+        dest = release_dir / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(Path(local_path).read_bytes())
+
+    if not any(p.is_file() for p in release_dir.rglob('*')):
+        raise RollbackError(
+            f'{release_dir} has no files after publish -- refusing to point current at it, '
+            f'previous release (if any) still live'
+        )
+
+    _flip_current(app_root, version)
+
+    for old in list_local_releases(app_root)[keep:]:
+        shutil.rmtree(old)
+
+    return release_dir
+
+
+def do_local_rollback(steps_back=1, app_root=None):
+    """Flip `current` back to an earlier local release -- no re-copy, no rebuild.
+
+    Locates the release `current` points at inside the version-sorted list
+    (rather than just excluding it by name, which is all rollback.sh's local
+    branch does) so steps_back > 1 and a `current` that points somewhere
+    already pruned both resolve correctly instead of silently going back
+    only one step or crashing on a missing directory.
+    """
+    app_root = _local_app_root(app_root)
+    current_link = app_root / 'current'
+    current_name = None
+    if current_link.is_symlink():
+        current_name = Path(os.readlink(current_link)).name
+
+    releases = list_local_releases(app_root)
+    if not releases:
+        raise RollbackError(f'no releases under {app_root / "releases"} to roll back to')
+
+    names = [d.name for d in releases]
+    start = names.index(current_name) if current_name in names else -1
+    target_idx = start + steps_back
+
+    if target_idx < 0 or target_idx >= len(releases):
+        raise RollbackError(
+            f'only {len(releases)} local release(s) under {app_root / "releases"} '
+            f'-- cannot go back {steps_back} from {current_name or "(no current set)"}'
+        )
+
+    target = releases[target_idx]
+    _flip_current(app_root, target.name)
+    return target
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -204,6 +345,35 @@ def main():
             sys.exit(1)
         print(f'Rolled back to release {target.name} ({len(files)} file(s)).')
         print('Live site now serving this release.')
+    elif cmd == 'publish-local':
+        try:
+            release_dir = publish_local()
+        except RollbackError as e:
+            print(f'Error: {e}', file=sys.stderr)
+            sys.exit(1)
+        n = sum(1 for _ in release_dir.rglob('*') if _.is_file())
+        print(f'Published local release: {release_dir} ({n} files)')
+        print(f'{release_dir.parent.parent / "current"} -> releases/{release_dir.name}')
+    elif cmd == 'list-local':
+        app_root = _local_app_root()
+        releases = list_local_releases()
+        current_name = None
+        current_link = app_root / 'current'
+        if current_link.is_symlink():
+            current_name = Path(os.readlink(current_link)).name
+        if not releases:
+            print(f'No local releases saved yet under {app_root / "releases"}.')
+        for r in releases:
+            print(f'  {r.name}' + (' (live)' if r.name == current_name else ''))
+    elif cmd == 'rollback-local':
+        steps_back = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+        try:
+            target = do_local_rollback(steps_back)
+        except RollbackError as e:
+            print(f'Error: {e}', file=sys.stderr)
+            sys.exit(1)
+        print(f'Rolled back to local release {target.name}.')
+        print(f'{target.parent.parent / "current"} -> releases/{target.name}')
     else:
         print(f'Unknown command: {cmd}', file=sys.stderr)
         sys.exit(1)

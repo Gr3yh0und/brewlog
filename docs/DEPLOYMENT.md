@@ -29,18 +29,26 @@ deploy/deploy.ps1 -SkipData -Labels
 
 One-time setup: copy `.env.example` → `.env` and fill in all values (see [Configuration](CONFIGURATION.md)).
 
+Two targets (WEBAPP_PROJECT_STANDARD.md §13B): **`public`** (FTP, the load-bearing one — printed
+bottle QR codes point at it) and **`local`** (WWW_ROOT/brewlog, served by the proxy — server-side
+only, since it writes directly to a local filesystem path). Target defaults to `public` if omitted,
+matching this repo's original FTP-only behavior; pass `local` or `both` explicitly.
+
 **Windows (PowerShell):**
 ```powershell
-deploy/deploy.ps1                    # export + upload everything
-deploy/deploy.ps1 -Labels            # same + generate and upload labels/
+deploy/deploy.ps1                    # public: export + upload everything
+deploy/deploy.ps1 -Target both       # public + local, same build
+deploy/deploy.ps1 -Labels            # same + generate and upload labels/ (public only)
 deploy/deploy.ps1 -SkipData          # upload index.html + favicon + i18n/ + logo/ only
 deploy/deploy.ps1 -SkipData -Labels  # frontend + labels only
 ```
 
 **Mac/Linux (bash):**
 ```bash
-bash deploy/deploy.sh                    # export + upload everything
-bash deploy/deploy.sh --labels           # same + generate and upload labels/
+bash deploy/deploy.sh                    # public: export + upload everything
+bash deploy/deploy.sh both               # public + local, same build
+bash deploy/deploy.sh local              # local only — publishes to WWW_ROOT/brewlog
+bash deploy/deploy.sh --labels           # same + generate and upload labels/ (public only)
 bash deploy/deploy.sh --skip-data        # upload index.html + favicon + i18n/ + logo/ only
 bash deploy/deploy.sh --skip-data --labels
 ```
@@ -49,7 +57,10 @@ Each file upload retries up to 3 times (3 s pause between attempts) before the s
 
 ## Rollback
 
-Every deploy snapshots the exact bytes it's about to upload (`web/index.html`, `favicon.svg`, `logo/`, `i18n/`, `data/`, `images/` — not `labels/`, which is a separate printable artifact) to `deploy/releases/` before uploading, and keeps the last 5. `--rollback` re-uploads an earlier snapshot verbatim — no re-export, no rebuild, so it still works even if the KBH2 database has since changed in a way that would make a fresh export different from what was actually live.
+The two targets use different rollback mechanisms, so `--rollback`/`-Rollback` needs a single target
+— not `both` — to know which one to reverse.
+
+**`public`**: every deploy snapshots the exact bytes it's about to upload (`web/index.html`, `favicon.svg`, `logo/`, `i18n/`, `data/`, `images/` — not `labels/`, which is a separate printable artifact) to `deploy/releases/` before uploading, and keeps the last 5. Rollback re-uploads an earlier snapshot verbatim — no re-export, no rebuild, so it still works even if the KBH2 database has since changed in a way that would make a fresh export different from what was actually live.
 
 ```powershell
 deploy/deploy.ps1 -Rollback              # re-publish the release before the current one
@@ -62,6 +73,22 @@ bash deploy/deploy.sh --rollback=2       # go back 2 releases instead of 1
 ```
 
 `python3 deploy/rollback.py list` shows what's saved locally, newest first (`[0]` is what's live now, assuming nothing was published outside these scripts). The public URL is load-bearing (printed bottle QR codes point at it — see [main README](../README.md)), so a bad publish is worth rolling back rather than leaving live while you investigate.
+
+**`local`**: no snapshot needed — every published version already lives under
+`WWW_ROOT/brewlog/releases/<VERSION>/` (WEBAPP_PROJECT_STANDARD.md §14B). Rollback just flips the
+`current` symlink back; instant, no re-copy.
+
+```powershell
+deploy/deploy.ps1 -Target local -Rollback              # flip back one release
+deploy/deploy.ps1 -Target local -Rollback -RollbackN 2 # flip back two releases
+```
+
+```bash
+bash deploy/deploy.sh local --rollback     # flip back one release
+bash deploy/deploy.sh local --rollback=2   # flip back two releases
+```
+
+`python3 deploy/rollback.py list-local` shows what's saved under `WWW_ROOT/brewlog/releases`, newest version first, with `(live)` marking whatever `current` points at.
 
 ## Local Development
 
