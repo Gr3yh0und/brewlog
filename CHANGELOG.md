@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), version
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-09-26
+
 ### Added
 - Onboarded onto `WEBAPP_PROJECT_STANDARD.md`: `homelab.yml`, `VERSION`, this changelog,
   `deploy.config.example`, `.claude/skills/{deploy,rollback}`, Dependabot.
@@ -15,17 +17,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), version
   (`WEBAPP_PROJECT_STANDARD.md` §14B). Target defaults to `public`, unchanged from before.
   `deploy/rollback.py publish-local`/`list-local`/`rollback-local[=N]` implement the mechanics;
   rollback flips `current` back, no re-copy.
-
 - Wired to the shared `/deploy` skill: `deploy/build.sh` assembles `dist/`, `deploy.config` sets
   `local` + `public` targets (public reuses the FTP uploader).
 - Secrets are read from `/etc/homelab/brewlog.env` when readable (override with `BREWLOG_ENV`),
   else the repo `.env`.
-
 ### Fixed
 - `deploy/rollback.py`: a pruned bare release name could be reused by a later deploy and get
   mispruned in turn — in the worst case, deleted in the same call that created it. Release
   directories now carry a monotonic sequence number that's never reused.
-
 ### Changed
 - CI actions bumped to their latest majors (`actions/checkout` 4→7, `actions/setup-python` 5→7).
 
