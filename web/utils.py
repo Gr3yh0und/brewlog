@@ -2,12 +2,26 @@ import os
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
+_HOMELAB_ENV = '/etc/homelab/brewlog.env'
+
+
+def env_path():
+    """Where the secrets live: $BREWLOG_ENV, else /etc/homelab/brewlog.env
+    (WEBAPP_PROJECT_STANDARD.md §8) when readable, else .env in the project root."""
+    override = os.environ.get('BREWLOG_ENV')
+    if override:
+        return override
+    if os.access(_HOMELAB_ENV, os.R_OK):
+        return _HOMELAB_ENV
+    return os.path.join(_ROOT, '.env')
+
+
 def load_env():
-    """Parse .env from project root; return dict of key→value."""
+    """Parse the env file (see env_path()); return dict of key→value."""
     env = {}
-    env_path = os.path.join(_ROOT, '.env')
-    if os.path.isfile(env_path):
-        with open(env_path, encoding='utf-8') as f:
+    env_path_ = env_path()
+    if os.path.isfile(env_path_):
+        with open(env_path_, encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith('#') and '=' in line:

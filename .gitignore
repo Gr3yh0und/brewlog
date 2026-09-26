@@ -17,6 +17,7 @@ archive/
 web/data/
 web/images/
 web/labels/
+dist/
 web/logo/
 
 # Rollback snapshots (WEBAPP_PROJECT_STANDARD.md §14B) — this is a public

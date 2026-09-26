@@ -5,9 +5,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), version
 
 ## [Unreleased]
 
-No `/deploy` skill exists for this repo yet (bespoke FTP deploy path, `WEBAPP_PROJECT_STANDARD.md`
-§9), so nothing here has been tagged or versioned — hand-maintained until it does.
-
 ### Added
 - Onboarded onto `WEBAPP_PROJECT_STANDARD.md`: `homelab.yml`, `VERSION`, this changelog,
   `deploy.config.example`, `.claude/skills/{deploy,rollback}`, Dependabot.
@@ -18,6 +15,11 @@ No `/deploy` skill exists for this repo yet (bespoke FTP deploy path, `WEBAPP_PR
   (`WEBAPP_PROJECT_STANDARD.md` §14B). Target defaults to `public`, unchanged from before.
   `deploy/rollback.py publish-local`/`list-local`/`rollback-local[=N]` implement the mechanics;
   rollback flips `current` back, no re-copy.
+
+- Wired to the shared `/deploy` skill: `deploy/build.sh` assembles `dist/`, `deploy.config` sets
+  `local` + `public` targets (public reuses the FTP uploader).
+- Secrets are read from `/etc/homelab/brewlog.env` when readable (override with `BREWLOG_ENV`),
+  else the repo `.env`.
 
 ### Fixed
 - `deploy/rollback.py`: a pruned bare release name could be reused by a later deploy and get

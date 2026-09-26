@@ -20,7 +20,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WEB_DIR="$ROOT/web"
-ENV_FILE="$ROOT/.env"
+# Secrets: $BREWLOG_ENV, else /etc/homelab/brewlog.env if readable, else repo .env
+# (same order as web/utils.py env_path()).
+if [[ -n "${BREWLOG_ENV:-}" ]]; then
+    ENV_FILE="$BREWLOG_ENV"
+elif [[ -r /etc/homelab/brewlog.env ]]; then
+    ENV_FILE="/etc/homelab/brewlog.env"
+else
+    ENV_FILE="$ROOT/.env"
+fi
 
 TARGET="public"
 LABELS=false
@@ -44,8 +52,8 @@ if $ROLLBACK && [[ "$TARGET" == "both" ]]; then
 fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
-    echo "Error: No .env found: $ENV_FILE" >&2
-    echo "Please copy .env.example to .env and fill in credentials." >&2
+    echo "Error: No env file found: $ENV_FILE" >&2
+    echo "Copy .env.example to .env (or /etc/homelab/brewlog.env) and fill in credentials." >&2
     exit 1
 fi
 

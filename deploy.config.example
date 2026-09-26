@@ -6,23 +6,24 @@
 # need to be set here; setting them here anyway would be a smell to clean up,
 # not a normal override, per WEBAPP_PROJECT_STANDARD.md §1a.
 #
-# Not yet wired to the shared deploy.sh/rollback.sh — this repo still runs its
-# own bespoke deploy/deploy.sh + deploy/deploy.ps1 (documented exception,
-# WEBAPP_PROJECT_STANDARD.md §9, see infrastructure/compliance/brewlog.md §9).
-# This file exists so the eventual cutover is a switch, not a rewrite.
+# Wired to the shared /deploy skill (infrastructure/scripts/deploy.sh). Secrets are read from
+# /etc/homelab/brewlog.env when present, else the repo's .env (web/utils.py env_path()).
 #
 # TEST_CMD must stay byte-identical to .github/workflows/ci.yml's test step
 # (WEBAPP_PROJECT_STANDARD.md §7) — a CI pass that ran a different command
 # than the deploy gate would be checking the wrong thing.
 TEST_CMD="python3 -m unittest discover -s tests -v"
 
-# No build step — brewlog is a single index.html plus static data files
-# (WEBAPP_PROJECT_STANDARD.md §12B); the "build directory" is just the
-# source directory.
-BUILD_DIR="web"
+# deploy/build.sh exports the data and assembles dist/ — exactly the files the site serves.
+BUILD_CMD="bash deploy/build.sh"
+BUILD_DIR="dist"
 
 # Dual-target: rsync to the local proxy host and FTP to the public host, from
 # the same build. The public target is genuinely publishable — it's the
 # catalog itself — and its URL is load-bearing (printed bottle QR codes,
 # WEBAPP_PROJECT_STANDARD.md §13B), so it must never change.
 TARGETS="local public"
+
+# The public host is FTP, not rsync/ssh, so the shared script's default public publish
+# can't be used — reuse the bespoke uploader instead.
+PUBLIC_PUBLISH_CMD="bash deploy/deploy.sh public"
