@@ -30,6 +30,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), version
 - Secrets are read from `/etc/homelab/brewlog.env` when readable (override with `BREWLOG_ENV`),
   else the repo `.env`.
 ### Fixed
+- `deploy/deploy.sh`: the public (FTP) upload now sends `logo/logo.svg`, matching `deploy.ps1`.
 - `deploy/rollback.py`: a pruned bare release name could be reused by a later deploy and get
   mispruned in turn — in the worst case, deleted in the same call that created it. Release
   directories now carry a monotonic sequence number that's never reused.

@@ -123,6 +123,10 @@ if [[ "$TARGET" == "public" || "$TARGET" == "both" ]]; then
     echo "  logo/..."
     LOGO_ENCODED="$(urlencode "$LOGO_PNG")"
     send_file "$WEB_DIR/logo/$LOGO_PNG" "ftp://${FTP_HOST}${FTP_DIR}/logo/$LOGO_ENCODED"
+    # SVG logo (ASCII filename – no encoding needed); only present if LOGO_SVG resolved at export
+    if [[ -f "$WEB_DIR/logo/logo.svg" ]]; then
+        send_file "$WEB_DIR/logo/logo.svg" "ftp://${FTP_HOST}${FTP_DIR}/logo/logo.svg"
+    fi
 
     # 6. Upload i18n/
     I18N_FILES=("$WEB_DIR/i18n"/*.json)
