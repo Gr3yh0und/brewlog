@@ -4,7 +4,9 @@ Copy `.env.example` to `.env` and fill in all values before running any script.
 
 ## Environment Variables
 
-All variables live in `.env`. Copy `.env.example` as a starting point.
+All variables live in one env file. Copy `.env.example` as a starting point. The scripts read the
+first one that exists: `$BREWLOG_ENV`, then `/etc/homelab/brewlog.env` (home-lab server,
+`WEBAPP_PROJECT_STANDARD.md` §8), then `.env` in the project root. `deploy.ps1` reads `.env` only.
 
 ### Required (Deployment)
 

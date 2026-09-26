@@ -100,8 +100,10 @@ brewlog/
 │   └── labels/                    # Generated (not in repo)
 ├── tests/
 ├── deploy/
+│   ├── build.sh                   # export + assemble dist/ (BUILD_CMD for /deploy)
 │   ├── deploy.ps1                 # FTP upload – Windows (PowerShell)
-│   └── deploy.sh                  # FTP upload – Mac/Linux (bash)
+│   ├── deploy.sh                  # FTP upload + local publish – Mac/Linux (bash)
+│   └── rollback.py                # release snapshots + rollback for both targets
 ├── .env                           # FTP credentials + brewery config (not in repo)
 └── .env.example                   # Template for .env
 ```

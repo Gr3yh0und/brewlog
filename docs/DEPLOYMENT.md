@@ -25,7 +25,23 @@ deploy/deploy.ps1 -SkipData       # skip export.py and data/ upload
 deploy/deploy.ps1 -SkipData -Labels
 ```
 
-## Deploy Commands
+## Deploy on the server: `/deploy`
+
+On the home-lab server, deploy with the shared `/deploy` skill (`WEBAPP_PROJECT_STANDARD.md` §9).
+It runs the tests, bumps `VERSION`, updates `CHANGELOG.md`, tags and pushes, runs
+`deploy/build.sh` (export + assemble `dist/`), then publishes:
+
+```bash
+/deploy local     # WWW_ROOT/brewlog/releases/<VERSION>/, flips `current`
+/deploy public    # FTP, via PUBLIC_PUBLISH_CMD="bash deploy/deploy.sh public"
+/deploy           # both targets (deploy.config: TARGETS="local public")
+```
+
+Needs a gitignored `deploy.config` — copy `deploy.config.example`. Secrets are read from
+`/etc/homelab/brewlog.env` when readable, else the repo `.env` (`BREWLOG_ENV` overrides both).
+Only `deploy.sh` knows this order; `deploy.ps1` always reads `.env`.
+
+## Deploy Commands (direct)
 
 One-time setup: copy `.env.example` → `.env` and fill in all values (see [Configuration](CONFIGURATION.md)).
 
