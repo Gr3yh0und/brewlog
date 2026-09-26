@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), version
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-09-26
+
 ### Added
 - `deploy/build.sh` writes `dist/health.json` for the Homepage widget (`WEBAPP_PROJECT_STANDARD.md` §6a): version, status, and `last_update` = newest change under `input/`.
 
