@@ -243,7 +243,13 @@ class TestRollback(unittest.TestCase):
             def quit(self):
                 raise EOFError('connection closed')
 
-        with unittest.mock.patch.object(rollback.ftplib, 'FTP', lambda host: FakeFtp()):
+        def fake_ftp(host, timeout=None):
+            # _ftp_upload_all must pass a timeout: without one a dead server
+            # hangs the deploy/rollback run forever.
+            self.assertEqual(timeout, 60)
+            return FakeFtp()
+
+        with unittest.mock.patch.object(rollback.ftplib, 'FTP', fake_ftp):
             with self.assertRaises(ftplib.error_perm):
                 rollback._ftp_upload_all(target, [f], env)
 
@@ -345,6 +351,19 @@ class TestLocalTarget(unittest.TestCase):
             sorted(r.name for r in releases),
             ['1.0.1', '1.0.2', '1.0.3', '1.0.4', '1.0.5'],
         )
+
+    def test_list_local_releases_skips_half_written_tmp_dirs(self):
+        # A `<version>.tmp` dir is a half-written release publish_local() builds
+        # into before swapping it into place, so it must never be listed as a
+        # rollback candidate (same filter list_releases() uses for snapshots).
+        releases_dir = self.app_root / 'releases'
+        for name in ('1.2.1', '1.2.2.tmp'):
+            d = releases_dir / name
+            d.mkdir(parents=True)
+            (d / 'index.html').write_text(name, encoding='utf-8')
+
+        releases = rollback.list_local_releases(self.app_root)
+        self.assertEqual([r.name for r in releases], ['1.2.1'])
 
     def test_rollback_flips_current_to_previous_not_latest(self):
         rollback.publish_local(version='1.0.0', files=self._files('v1'), app_root=self.app_root)

@@ -174,7 +174,7 @@ def _ftp_upload_all(target, files, env):
             raise RollbackError(f'{key} is not set -- add it to the env file (see .env.example)')
     host = env['FTP_HOST']
     remote_base = env['FTP_DIR'].rstrip('/')
-    ftp = ftplib.FTP(host)
+    ftp = ftplib.FTP(host, timeout=60)
     try:
         ftp.login(env['FTP_USER'], env['FTP_PASS'])
         ftp.set_pasv(True)
@@ -254,7 +254,7 @@ def list_local_releases(app_root=None):
     releases_dir = _local_app_root(app_root) / 'releases'
     if not releases_dir.exists():
         return []
-    dirs = [d for d in releases_dir.iterdir() if d.is_dir()]
+    dirs = [d for d in releases_dir.iterdir() if d.is_dir() and not d.name.endswith('.tmp')]
     return sorted(dirs, key=lambda d: _version_key(d.name), reverse=True)
 
 
