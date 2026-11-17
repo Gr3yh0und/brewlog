@@ -198,7 +198,7 @@ if [[ "$TARGET" == "public" || "$TARGET" == "both" ]]; then
     fi
 
     echo ""
-    echo "Public deploy complete: ${SITE_URL}"
+    echo "Public deploy complete: ${SITE_URL:-$FTP_HOST}"
 fi
 
 if [[ "$TARGET" == "local" || "$TARGET" == "both" ]]; then
